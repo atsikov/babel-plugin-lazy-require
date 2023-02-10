@@ -47,11 +47,10 @@ function myCode() {
 **Output**
 
 ```js
-const _someModule = {
-    initialized: false
-};
-
 function _imports() {
+    const _someModule = {
+        initialized: false
+    };
     return {
         get someModule() {
             if (!_someModule.initialized) {
