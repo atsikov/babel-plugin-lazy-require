@@ -6,15 +6,15 @@ Object.defineProperty(exports, '__esModule', {
 
 exports.default = function ({ types: t }) {
     const visitor = {
-        Program(path) {
+        Program(path, state) {
             const declarations = new Map();
             const importsVar = path.scope.generateUidIdentifier('imports');
 
             // Collect up the declarations
-            path.traverse(requireDeclarationVisitor, { declarations });
+            path.traverse(requireDeclarationVisitor, { declarations, opts: state.opts });
 
             // Perform the replacements in the rest of the codebase
-            path.traverse(requireUsagesVisitor, { declarations, requireScope: path.scope, importsVar });
+            path.traverse(requireUsagesVisitor, { declarations, requireScope: path.scope, importsVar, opts: state.opts });
 
             // Add the variables off to the side where we'll store our
             // resolved imports (for handling setters)
@@ -69,20 +69,27 @@ exports.default = function ({ types: t }) {
                 }
             }
 
-            path.unshiftContainer('body', t.variableDeclaration('const', [t.variableDeclarator(importsVar, t.objectExpression(properties))]));
-            for (const declaration of variableDeclarations) {
-                path.unshiftContainer('body', declaration);
-            }
+            
+            const importFnDeclaration = t.functionDeclaration(importsVar, [], t.blockStatement([
+                ...variableDeclarations,
+                t.returnStatement(
+                    t.objectExpression(properties)
+                )
+            ]))
+
+            path.unshiftContainer('body', [importFnDeclaration])
         }
     };
 
     const requireDeclarationVisitor = {
-        VariableDeclaration(path) {
+        VariableDeclaration(path, state) {
             // TODO: support nonglobal declarations
             if (!t.isProgram(path.parent)) {
                 // We don't care about nonglobal declarations (for now)
                 return;
             }
+
+            const { ignoreModulesPatterns = [] } = state.opts || {}
 
             path.traverse({
                 VariableDeclarator(path) {
@@ -91,7 +98,8 @@ exports.default = function ({ types: t }) {
                         !t.isCallExpression(path.node.init) ||
                         !t.isIdentifier(path.node.init.callee, { name: 'require' }) ||
                         path.node.init.arguments.length !== 1 ||
-                        !t.isLiteral(path.node.init.arguments[0])
+                        !t.isLiteral(path.node.init.arguments[0]) ||
+                        ignoreModulesPatterns.some(pattern => pattern.test(path.node.init.arguments[0].value))
                     ) {
                         return;
                     }
@@ -149,7 +157,7 @@ exports.default = function ({ types: t }) {
                 return;
             }
 
-            path.replaceWith(t.memberExpression(this.importsVar, t.identifier(path.node.name)));
+            path.replaceWith(t.memberExpression(t.callExpression(this.importsVar, []), t.identifier(path.node.name)));
 
             // Don't process the value wee just inserted
             path.skip();

@@ -3,3 +3,5 @@ npm-debug*
 /test-dist/
 /.nyc_output/
 /coverage/
+/.history/
+/.vscode/
