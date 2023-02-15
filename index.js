@@ -19,17 +19,25 @@ exports.default = function ({ types: t }) {
             // Add the variables off to the side where we'll store our
             // resolved imports (for handling setters)
             const variableDeclarations = [];
+            const assignmentExpressions = [];
             for (const [name, value] of declarations) {
                 value.identifier = path.scope.generateUidIdentifier(name);
                 variableDeclarations.push(
-                    t.variableDeclaration('const', [
-                        t.variableDeclarator(value.identifier, t.objectExpression([
-                            t.objectProperty(t.identifier('initialized'), t.booleanLiteral(false))
-                        ]))
+                    t.variableDeclaration('var', [
+                        t.variableDeclarator(value.identifier)
                     ])
+                );
+                assignmentExpressions.push(
+                    t.expressionStatement(t.assignmentExpression('=', value.identifier, t.logicalExpression('||',
+                        value.identifier,
+                        t.objectExpression([
+                            t.objectProperty(t.identifier('initialized'), t.booleanLiteral(false))
+                        ])
+                    )))
                 );
             }
             variableDeclarations.reverse();
+            assignmentExpressions.reverse();
 
             const properties = [];
             for (const [name, { identifier, requireString, isConst }] of declarations) {
@@ -69,15 +77,15 @@ exports.default = function ({ types: t }) {
                 }
             }
 
-            
+
             const importFnDeclaration = t.functionDeclaration(importsVar, [], t.blockStatement([
-                ...variableDeclarations,
+                ...assignmentExpressions,
                 t.returnStatement(
                     t.objectExpression(properties)
                 )
             ]))
 
-            path.unshiftContainer('body', [importFnDeclaration])
+            path.unshiftContainer('body', [...variableDeclarations, importFnDeclaration])
         }
     };
 
